@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from functools import lru_cache
 from typing import Any
 
 import requests
@@ -20,6 +21,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 MS_PER_MPH = 0.44704
 DISPLAY_STATE_VERSION = 2
+STATUS_ICON_FILES = {
+    "GREAT": "great.png",
+    "OK": "ok.png",
+    "RISKY": "risky.png",
+    "NOPE": "nope.png",
+}
 
 
 @dataclass
@@ -253,23 +260,27 @@ def load_font(path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageF
 
 
 
-def draw_status_icon(draw: ImageDraw.ImageDraw, status: str, center: tuple[int, int], radius: int) -> None:
+@lru_cache(maxsize=16)
+def load_status_icon(status: str, diameter: int) -> Image.Image:
+    icon_name = STATUS_ICON_FILES.get(status)
+    if not icon_name:
+        raise ValueError(f"Unknown status icon: {status}")
+
+    icon_path = Path(__file__).resolve().parent / "assets" / "icons" / icon_name
+    icon = Image.open(icon_path).convert("L").resize((diameter, diameter), Image.Resampling.LANCZOS)
+    return icon
+
+
+def draw_status_icon(canvas: Image.Image, status: str, center: tuple[int, int], radius: int) -> None:
+    diameter = radius * 2
+    icon = load_status_icon(status, diameter)
     cx, cy = center
-    draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=0, width=4)
+    x = cx - radius
+    y = cy - radius
 
-    eye_r = 4
-    draw.ellipse((cx - 14 - eye_r, cy - 9 - eye_r, cx - 14 + eye_r, cy - 9 + eye_r), fill=0)
-    draw.ellipse((cx + 14 - eye_r, cy - 9 - eye_r, cx + 14 + eye_r, cy - 9 + eye_r), fill=0)
-
-    if status == "GREAT":
-        draw.arc((cx - 22, cy + 2, cx + 22, cy + 30), start=15, end=165, fill=0, width=4)
-        draw.line((cx - 20, cy + 14, cx + 20, cy + 14), fill=0, width=3)
-    elif status == "OK":
-        draw.arc((cx - 22, cy - 2, cx + 22, cy + 20), start=20, end=160, fill=0, width=4)
-    elif status == "RISKY":
-        draw.line((cx - 18, cy + 18, cx + 18, cy + 10), fill=0, width=4)
-    else:  # NOPE
-        draw.arc((cx - 22, cy + 6, cx + 22, cy + 30), start=200, end=340, fill=0, width=4)
+    # Create a mask from dark pixels so only icon strokes are pasted as black.
+    mask = icon.point(lambda p: 255 if p < 180 else 0, mode="1")
+    canvas.paste(0, (x, y), mask)
 
 
 def draw_colored_segments(
@@ -313,7 +324,7 @@ def render_image(result: dict[str, Any], now: datetime, cfg: dict[str, Any]) -> 
     status_x = max(10, (status_max_right - status_width) // 2)
 
     status_draw.text((status_x, 8), status, font=status_font, fill=0)
-    draw_status_icon(draw_b, status, center=(icon_center_x, icon_center_y), radius=icon_radius)
+    draw_status_icon(black, status, center=(icon_center_x, icon_center_y), radius=icon_radius)
 
     w = result.get("worst", {})
     wind_ms = float(w.get("wind_ms", 0.0))
