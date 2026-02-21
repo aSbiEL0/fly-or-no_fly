@@ -84,6 +84,14 @@ Live update:
 python -m fpv_board.main --config /opt/fpv-board/fpv_board/config.json
 ```
 
+Preview alternate board renders immediately (without waiting for weather/condition changes):
+
+```bash
+python -m fpv_board.main --config /opt/fpv-board/fpv_board/config.json --preview-status NOPE --force-refresh
+```
+
+You can use `--preview-status` with `GREAT`, `OK`, `MARGINAL`, or `NOPE` to test each visual state.
+
 ## systemd setup
 
 ```bash

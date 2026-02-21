@@ -397,7 +397,17 @@ def show_on_epaper(black: Image.Image, red: Image.Image, model_path: str) -> Non
     epd.sleep()
 
 
-def run(config_path: Path, dry_run: bool) -> int:
+def apply_preview_status(result: dict[str, Any], preview_status: str | None) -> dict[str, Any]:
+    if not preview_status:
+        return result
+    preview_result = dict(result)
+    preview_result["status"] = preview_status
+    preview_result["reason"] = f"Preview mode: forced {preview_status}"
+    preview_result["trend"] = "Preview render"
+    return preview_result
+
+
+def run(config_path: Path, dry_run: bool, preview_status: str | None, force_refresh: bool) -> int:
     cfg = load_config(config_path)
     setup_logging(Path(cfg["state"]["log_file"]))
 
@@ -422,11 +432,12 @@ def run(config_path: Path, dry_run: bool) -> int:
     )
 
     result = evaluate(selected, cfg)
+    result = apply_preview_status(result, preview_status)
     display_state = build_display_state(result, cfg)
 
     cache_file = Path(cfg["state"]["cache_file"])
     previous_state = load_previous_state(cache_file)
-    changed = not states_equal(previous_state, display_state)
+    changed = force_refresh or bool(preview_status) or (not states_equal(previous_state, display_state))
 
     black, red = render_image(result, now, cfg)
 
@@ -451,13 +462,23 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="FPV Flight Board updater")
     parser.add_argument("--config", default="/opt/fpv-board/fpv_board/config.json", help="Path to config file")
     parser.add_argument("--dry-run", action="store_true", help="Print computed output without touching display")
+    parser.add_argument(
+        "--preview-status",
+        choices=["GREAT", "OK", "MARGINAL", "NOPE"],
+        help="Force a rendered status so you can preview alternate board images immediately",
+    )
+    parser.add_argument(
+        "--force-refresh",
+        action="store_true",
+        help="Refresh display even when change detection says nothing meaningful changed",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     try:
-        raise SystemExit(run(Path(args.config), args.dry_run))
+        raise SystemExit(run(Path(args.config), args.dry_run, args.preview_status, args.force_refresh))
     except Exception as exc:  # deliberate top-level guard for service reliability
         logging.exception("Fatal error: %s", exc)
         raise
