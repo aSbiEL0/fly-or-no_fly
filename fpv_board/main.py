@@ -156,7 +156,7 @@ def status_from_score(score: int) -> str:
     if score == 1:
         return "OK"
     if score == 2:
-        return "MARGINAL"
+        return "RISKY"
     return "NOPE"
 
 
@@ -262,22 +262,12 @@ def draw_status_icon(draw: ImageDraw.ImageDraw, status: str, center: tuple[int, 
     draw.ellipse((cx + 14 - eye_r, cy - 9 - eye_r, cx + 14 + eye_r, cy - 9 + eye_r), fill=0)
 
     if status == "GREAT":
-        draw.arc((cx - 22, cy - 6, cx + 22, cy + 22), start=20, end=160, fill=0, width=4)
+        draw.arc((cx - 22, cy + 2, cx + 22, cy + 30), start=15, end=165, fill=0, width=4)
+        draw.line((cx - 20, cy + 14, cx + 20, cy + 14), fill=0, width=3)
     elif status == "OK":
-        draw.line((cx - 18, cy + 14, cx + 18, cy + 14), fill=0, width=4)
-    elif status == "MARGINAL":
-        draw.arc((cx - 20, cy - 20, cx - 10, cy - 10), start=200, end=320, fill=0, width=3)
-        draw.arc((cx + 10, cy - 20, cx + 20, cy - 10), start=220, end=340, fill=0, width=3)
-        zig = [
-            (cx - 24, cy + 14),
-            (cx - 16, cy + 6),
-            (cx - 8, cy + 14),
-            (cx, cy + 6),
-            (cx + 8, cy + 14),
-            (cx + 16, cy + 6),
-            (cx + 24, cy + 14),
-        ]
-        draw.line(zig, fill=0, width=4)
+        draw.arc((cx - 22, cy - 2, cx + 22, cy + 20), start=20, end=160, fill=0, width=4)
+    elif status == "RISKY":
+        draw.line((cx - 18, cy + 18, cx + 18, cy + 10), fill=0, width=4)
     else:  # NOPE
         draw.arc((cx - 22, cy + 6, cx + 22, cy + 30), start=200, end=340, fill=0, width=4)
 
@@ -313,8 +303,17 @@ def render_image(result: dict[str, Any], now: datetime, cfg: dict[str, Any]) -> 
 
     status = result["status"]
     status_draw = draw_r if (status == "NOPE" and cfg["display"].get("use_red_for_nope", True)) else draw_b
-    status_draw.text((14, 8), status, font=status_font, fill=0)
-    draw_status_icon(draw_b, status, center=(236, 42), radius=35)
+
+    icon_radius = 35
+    icon_center_x = width - 8 - icon_radius
+    icon_center_y = 42
+    icon_left_edge = icon_center_x - icon_radius
+    status_width = draw_b.textbbox((0, 0), status, font=status_font)[2]
+    status_max_right = icon_left_edge - 12
+    status_x = max(10, (status_max_right - status_width) // 2)
+
+    status_draw.text((status_x, 8), status, font=status_font, fill=0)
+    draw_status_icon(draw_b, status, center=(icon_center_x, icon_center_y), radius=icon_radius)
 
     w = result.get("worst", {})
     wind_ms = float(w.get("wind_ms", 0.0))
@@ -464,7 +463,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Print computed output without touching display")
     parser.add_argument(
         "--preview-status",
-        choices=["GREAT", "OK", "MARGINAL", "NOPE"],
+        choices=["GREAT", "OK", "RISKY", "NOPE"],
         help="Force a rendered status so you can preview alternate board images immediately",
     )
     parser.add_argument(
