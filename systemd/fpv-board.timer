@@ -1,0 +1,11 @@
+[Unit]
+Description=Run FPV Flight Board updater hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=1min
+Unit=fpv-board.service
+
+[Install]
+WantedBy=timers.target
