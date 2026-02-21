@@ -1,2 +1,8 @@
 requests>=2.31.0
 Pillow>=10.0.0
+
+# System package required by fpv_board/config.json default font paths
+# (install via apt, not pip):
+# fonts-dejavu-core
+# GPIO backend expected by Waveshare/gpiozero stack (install via apt):
+# python3-lgpio

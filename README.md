@@ -13,7 +13,9 @@ This project fetches Open-Meteo forecast data, evaluates **daylight-only** flyin
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git libopenjp2-7 libtiff6 libjpeg62-turbo
+sudo apt install -y python3 python3-venv python3-pip git rsync \
+  libopenjp2-7 libtiff6 libjpeg62-turbo fonts-dejavu-core \
+  python3-lgpio
 sudo raspi-config nonint do_spi 0
 sudo reboot
 ```
@@ -22,6 +24,7 @@ After reboot, reconnect and continue:
 
 ```bash
 ls /dev/spidev0.0 /dev/spidev0.1
+# If either file is missing, SPI is not enabled correctly.
 ```
 
 Create install directory and virtual environment:
@@ -31,7 +34,7 @@ sudo mkdir -p /opt/fpv-board
 sudo chown -R pi:pi /opt/fpv-board
 rsync -av --delete ./ /opt/fpv-board/
 cd /opt/fpv-board
-python3 -m venv .venv
+python3 -m venv --system-site-packages .venv
 . .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -42,7 +45,6 @@ Install Waveshare Python e-Paper library:
 ```bash
 cd /opt/fpv-board
 git clone https://github.com/waveshare/e-Paper.git waveshare-lib
-pip install RPi.GPIO spidev gpiozero
 export PYTHONPATH="/opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib:${PYTHONPATH}"
 ```
 
@@ -50,6 +52,7 @@ To make `PYTHONPATH` persistent for systemd, add to service file:
 
 ```ini
 Environment=PYTHONPATH=/opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib
+Environment=GPIOZERO_PIN_FACTORY=lgpio
 ```
 
 ## Wiring
@@ -119,3 +122,5 @@ journalctl -u fpv-board.service -n 100 --no-pager
 - **Wrong pins / BUSY stuck**: verify HAT seated correctly and BUSY maps to GPIO24.
 - **Font missing**: defaults to PIL font automatically; adjust `font_*` paths in config if needed.
 - **Import error for Waveshare module**: confirm `PYTHONPATH` includes Waveshare `python/lib` directory.
+- **`No module named lgpio` in venv**: recreate venv with `python3 -m venv --system-site-packages .venv` so apt package `python3-lgpio` is visible.
+- **`Failed to add edge detection`**: set `GPIOZERO_PIN_FACTORY=lgpio` (in shell or systemd service), then rerun.

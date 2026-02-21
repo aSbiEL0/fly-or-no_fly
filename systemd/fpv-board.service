@@ -8,6 +8,7 @@ Type=oneshot
 User=pi
 WorkingDirectory=/opt/fpv-board
 Environment=PYTHONPATH=/opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib
+Environment=GPIOZERO_PIN_FACTORY=lgpio
 ExecStart=/opt/fpv-board/.venv/bin/python -m fpv_board.main --config /opt/fpv-board/fpv_board/config.json
 StandardOutput=journal
 StandardError=journal
