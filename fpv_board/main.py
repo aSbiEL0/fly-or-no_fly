@@ -297,6 +297,10 @@ def draw_colored_segments(
         target = draw_red if is_red else draw_black
         target.text((x, y), text, font=font, fill=0)
         x += seg_width
+
+
+def is_worsening_trend(trend_text: str) -> bool:
+    return trend_text.startswith("Worsening")
         
 
 def render_image(result: dict[str, Any], now: datetime, cfg: dict[str, Any]) -> tuple[Image.Image, Image.Image]:
@@ -332,23 +336,27 @@ def render_image(result: dict[str, Any], now: datetime, cfg: dict[str, Any]) -> 
     rain = int(round(float(w.get("rain", 0.0))))
     temp_c = float(w.get("temp_min", 0.0))
 
-    is_nope = status == "NOPE" and cfg["display"].get("use_red_for_nope", True)
+    wind_red = wind_ms > 5.0
+    gust_red = gust_ms >= 7.5
+    rain_red = rain >= 90
+    temp_red = temp_c <= 0.0
+
     draw_b.line((8, 90, width - 8, 90), fill=0, width=1)
     draw_b.line((8, 118, width - 8, 118), fill=0, width=1)
 
     metric_segments = [
-        (f"Wind {wind_ms:0.1f} m/s", is_nope),
+        (f"Wind {wind_ms:0.1f} m/s", wind_red),
         (" | ", False),
-        (f"Gust {gust_ms:0.1f}", False),
+        (f"Gust {gust_ms:0.1f}", gust_red),
         (" | ", False),
-        (f"Rain {rain}%", is_nope),
+        (f"Rain {rain}%", rain_red),
         (" | ", False),
-        (f"{temp_c:0.0f}°C", is_nope),
+        (f"{temp_c:0.0f}°C", temp_red),
     ]
     draw_colored_segments(draw_b, draw_r, 99, metric_segments, metrics_font, width)
 
-    trend_color = draw_r if is_nope else draw_b
     trend_text = result["trend"]
+    trend_color = draw_r if is_worsening_trend(trend_text) else draw_b
     trend_width = draw_b.textbbox((0, 0), trend_text, font=trend_font)[2]
     trend_x = max(8, (width - trend_width) // 2)
     trend_color.text((trend_x, 136), trend_text, font=trend_font, fill=0)
