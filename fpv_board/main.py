@@ -257,19 +257,34 @@ def draw_status_icon(draw: ImageDraw.ImageDraw, status: str, center: tuple[int, 
     cx, cy = center
     draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=0, width=4)
 
-    eye_r = 4
-    draw.ellipse((cx - 14 - eye_r, cy - 9 - eye_r, cx - 14 + eye_r, cy - 9 + eye_r), fill=0)
-    draw.ellipse((cx + 14 - eye_r, cy - 9 - eye_r, cx + 14 + eye_r, cy - 9 + eye_r), fill=0)
+    if status == "NOPE":
+        # Skull icon.
+        draw.ellipse((cx - 25, cy - 20, cx + 25, cy + 22), outline=0, width=4)
+        draw.ellipse((cx - 18, cy + 18, cx + 18, cy + 33), fill=255, outline=0, width=4)
+        draw.ellipse((cx - 16, cy + 3, cx - 4, cy + 16), fill=0)
+        draw.ellipse((cx + 4, cy + 3, cx + 16, cy + 16), fill=0)
+        draw.polygon([(cx, cy + 13), (cx - 4, cy + 20), (cx + 4, cy + 20)], fill=0)
+        draw.line((cx - 10, cy + 30, cx - 8, cy + 36), fill=0, width=4)
+        draw.line((cx + 10, cy + 30, cx + 8, cy + 36), fill=0, width=4)
+        return
 
-    if status == "GREAT":
-        draw.arc((cx - 22, cy + 2, cx + 22, cy + 30), start=15, end=165, fill=0, width=4)
-        draw.line((cx - 20, cy + 14, cx + 20, cy + 14), fill=0, width=3)
-    elif status == "OK":
-        draw.arc((cx - 22, cy - 2, cx + 22, cy + 20), start=20, end=160, fill=0, width=4)
-    elif status == "RISKY":
-        draw.line((cx - 18, cy + 18, cx + 18, cy + 10), fill=0, width=4)
-    else:  # NOPE
-        draw.arc((cx - 22, cy + 6, cx + 22, cy + 30), start=200, end=340, fill=0, width=4)
+    eye_r = 4
+    if status == "RISKY":
+        draw.line((cx - 19, cy - 15, cx - 9, cy - 8), fill=0, width=3)
+        draw.line((cx - 19, cy - 8, cx - 9, cy - 15), fill=0, width=3)
+        draw.line((cx + 9, cy - 15, cx + 19, cy - 8), fill=0, width=3)
+        draw.line((cx + 9, cy - 8, cx + 19, cy - 15), fill=0, width=3)
+        draw.arc((cx - 24, cy + 5, cx + 24, cy + 33), start=200, end=340, fill=0, width=4)
+    else:
+        draw.ellipse((cx - 14 - eye_r, cy - 9 - eye_r, cx - 14 + eye_r, cy - 9 + eye_r), fill=0)
+        draw.ellipse((cx + 14 - eye_r, cy - 9 - eye_r, cx + 14 + eye_r, cy - 9 + eye_r), fill=0)
+
+        if status == "GREAT":
+            draw.rectangle((cx - 22, cy + 6, cx + 22, cy + 22), outline=0, width=4, fill=255)
+            draw.line((cx - 18, cy + 13, cx + 18, cy + 13), fill=0, width=3)
+            draw.arc((cx - 26, cy + 4, cx + 26, cy + 30), start=15, end=165, fill=0, width=4)
+        else:  # OK
+            draw.arc((cx - 24, cy + 6, cx + 24, cy + 30), start=20, end=160, fill=0, width=4)
 
 
 def draw_colored_segments(
