@@ -101,6 +101,15 @@ python -m fpv_board.main --config /opt/fpv-board/fpv_board/config.json --preview
 
 You can use `--preview-status` with `GREAT`, `OK`, `RISKY`, or `NOPE` to test each visual state.
 
+
+Clear the display and shut down safely:
+
+```bash
+python -m fpv_board.shutdown --config /opt/fpv-board/fpv_board/config.json
+```
+
+Use `--clear-only` to clear the panel without powering down, or `--dry-run` to verify behavior without touching hardware.
+
 ## systemd setup
 
 ```bash
