@@ -461,11 +461,21 @@ def states_equal(a: dict[str, Any] | None, b: dict[str, Any]) -> bool:
     return a == b
 
 
-def ensure_waveshare_path() -> None:
-    bundled_lib = Path(__file__).resolve().parent.parent / "waveshare-lib" / "RaspberryPi_JetsonNano" / "python" / "lib"
-    bundled_lib_str = str(bundled_lib)
-    if bundled_lib.exists() and bundled_lib_str not in sys.path:
-        sys.path.insert(0, bundled_lib_str)
+def _waveshare_lib_candidates() -> list[Path]:
+    project_root = Path(__file__).resolve().parent.parent
+    repo_names = ("waveshare-lib", "e-Paper")
+    suffix = Path("RaspberryPi_JetsonNano") / "python" / "lib"
+    return [project_root / repo_name / suffix for repo_name in repo_names]
+
+
+def ensure_waveshare_path() -> list[str]:
+    added_paths: list[str] = []
+    for candidate in _waveshare_lib_candidates():
+        candidate_str = str(candidate)
+        if candidate.exists() and candidate_str not in sys.path:
+            sys.path.insert(0, candidate_str)
+            added_paths.append(candidate_str)
+    return added_paths
 
 
 def show_on_epaper(black: Image.Image, red: Image.Image, model_path: str) -> None:
@@ -474,10 +484,11 @@ def show_on_epaper(black: Image.Image, red: Image.Image, model_path: str) -> Non
     try:
         module = __import__(mod_name, fromlist=[attr_name])
     except ModuleNotFoundError as exc:
+        candidate_paths = ", ".join(str(path) for path in _waveshare_lib_candidates())
         raise RuntimeError(
             "Could not import Waveshare driver module. Ensure waveshare-lib is cloned at "
-            "/opt/fpv-board/waveshare-lib or set PYTHONPATH to include "
-            "waveshare-lib/RaspberryPi_JetsonNano/python/lib."
+            f"one of: {candidate_paths} or set PYTHONPATH to include "
+            "<waveshare-clone>/RaspberryPi_JetsonNano/python/lib."
         ) from exc
     epd_factory = getattr(module, attr_name)
     epd = epd_factory() if callable(epd_factory) else getattr(epd_factory, "EPD")()

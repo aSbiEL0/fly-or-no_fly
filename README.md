@@ -51,9 +51,9 @@ Install Waveshare Python e-Paper library:
 ```bash
 cd /opt/fpv-board
 # Clone only if the folder is not already present in your checkout
-[ -d waveshare-lib ] || git clone https://github.com/waveshare/e-Paper.git waveshare-lib
+[ -d waveshare-lib ] || [ -d e-Paper ] || git clone https://github.com/waveshare/e-Paper.git waveshare-lib
 
-# Optional for interactive troubleshooting; the app now auto-detects this bundled path when present
+# Optional for interactive troubleshooting; the app auto-detects waveshare-lib and e-Paper clone paths when present
 export PYTHONPATH="/opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib:${PYTHONPATH}"
 
 # Quick verification: should print a module path, not an import error
@@ -149,6 +149,18 @@ journalctl -u fpv-board.service -n 100 --no-pager
 - **Do not run `pip install lgpio`**: this project uses the Raspberry Pi OS package `python3-lgpio`; pip builds often fail and are unnecessary here.
 - **Wrong pins / BUSY stuck**: verify HAT seated correctly and BUSY maps to GPIO24.
 - **Font missing**: defaults to PIL font automatically; adjust `font_*` paths in config if needed.
-- **Import error for Waveshare module**: confirm `waveshare-lib/RaspberryPi_JetsonNano/python/lib` exists under `/opt/fpv-board` (auto-detected by the app). If running ad-hoc import checks, also export `PYTHONPATH` and run `python -c "import waveshare_epd; print(waveshare_epd.__file__)"`.
+- **Import error for Waveshare module**: confirm either `waveshare-lib/RaspberryPi_JetsonNano/python/lib` or `e-Paper/RaspberryPi_JetsonNano/python/lib` exists under `/opt/fpv-board` (both are auto-detected by the app). If running ad-hoc import checks, also export `PYTHONPATH` and run `python -c "import waveshare_epd; print(waveshare_epd.__file__)"`.
+- **`ModuleNotFoundError: No module named waveshare_epd` despite exported `PYTHONPATH`**: verify there is no newline in your export command and the path exists exactly:
+  ```bash
+  test -d /opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib || \
+  test -d /opt/fpv-board/e-Paper/RaspberryPi_JetsonNano/python/lib
+  python - <<'PY'
+import sys
+print("python:", sys.executable)
+print("has waveshare path:", [p for p in sys.path if "RaspberryPi_JetsonNano/python/lib" in p])
+import waveshare_epd
+print("waveshare_epd:", waveshare_epd.__file__)
+PY
+  ```
 - **`No module named lgpio` in venv**: recreate venv with `python3 -m venv --system-site-packages .venv` so apt package `python3-lgpio` is visible. Also remove pip-installed swig wrappers if present (`pip uninstall -y swig`), because they can shadow `/usr/bin/swig` during builds.
 - **`Failed to add edge detection`**: ensure no duplicate process is already using GPIO, then set `GPIOZERO_PIN_FACTORY=lgpio` (in shell or systemd service) and rerun.

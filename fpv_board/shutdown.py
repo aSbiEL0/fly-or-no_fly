@@ -7,13 +7,14 @@ import logging
 import subprocess
 from pathlib import Path
 
-from fpv_board.main import load_config, setup_logging
+from fpv_board.main import ensure_waveshare_path, load_config, setup_logging
 
 
 DEFAULT_CONFIG_PATH = Path("/opt/fpv-board/fpv_board/config.json")
 
 
 def clear_display(model_path: str) -> None:
+    ensure_waveshare_path()
     mod_name, attr_name = model_path.rsplit(".", 1)
     module = __import__(mod_name, fromlist=[attr_name])
     epd_factory = getattr(module, attr_name)
