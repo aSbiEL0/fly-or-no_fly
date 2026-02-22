@@ -7,10 +7,11 @@ import json
 import logging
 import math
 import os
+import random
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from functools import lru_cache
@@ -27,6 +28,7 @@ STATUS_ICON_FILES = {
     "RISKY": "risky.png",
     "NOPE": "nope.png",
 }
+NIGHT_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
 
 
 @dataclass
@@ -301,11 +303,63 @@ def draw_colored_segments(
 
 def is_worsening_trend(trend_text: str) -> bool:
     return trend_text.startswith("Worsening")
+
+
+def _night_seed_key(now: datetime) -> str:
+    # Keep the same image throughout the full overnight period.
+    seed_date = now.date() if now.hour >= 12 else (now.date() - timedelta(days=1))
+    return seed_date.isoformat()
+
+
+def pick_night_image(now: datetime, cfg: dict[str, Any]) -> Path | None:
+    image_dir_raw = cfg["display"].get("night_images_dir")
+    if not image_dir_raw:
+        return None
+
+    image_dir = Path(str(image_dir_raw)).expanduser()
+    if not image_dir.is_dir():
+        logging.warning("Night image directory not found: %s", image_dir)
+        return None
+
+    candidates = sorted(
+        p for p in image_dir.iterdir() if p.is_file() and p.suffix.lower() in NIGHT_IMAGE_EXTENSIONS
+    )
+    if not candidates:
+        logging.warning("No night images found in %s", image_dir)
+        return None
+
+    rng = random.Random(_night_seed_key(now))
+    return candidates[rng.randrange(len(candidates))]
+
+
+def render_night_image(path: Path, width: int, height: int) -> tuple[Image.Image, Image.Image]:
+    source = Image.open(path).convert("RGB").resize((width, height), Image.Resampling.LANCZOS)
+    black = Image.new("1", (width, height), 255)
+    red = Image.new("1", (width, height), 255)
+
+    black_pixels = black.load()
+    red_pixels = red.load()
+    source_pixels = source.load()
+    for y in range(height):
+        for x in range(width):
+            r, g, b = source_pixels[x, y]
+            brightness = (r + g + b) / 3
+            if brightness < 110:
+                black_pixels[x, y] = 0
+            elif r > 140 and r > g * 1.15 and r > b * 1.15:
+                red_pixels[x, y] = 0
+    return black, red
         
 
 def render_image(result: dict[str, Any], now: datetime, cfg: dict[str, Any]) -> tuple[Image.Image, Image.Image]:
     width = int(cfg["display"]["width"])
     height = int(cfg["display"]["height"])
+
+    if result.get("status") == "NOPE" and result.get("reason") == "Night / No daylight forecast":
+        night_image = pick_night_image(now, cfg)
+        if night_image:
+            return render_night_image(night_image, width, height)
+
     black = Image.new("1", (width, height), 255)
     red = Image.new("1", (width, height), 255)
 

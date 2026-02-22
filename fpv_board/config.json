@@ -13,10 +13,14 @@
     "font_regular": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "font_bold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "layout": "status",
-    "icon_set": "faces"
+    "icon_set": "faces",
+    "night_images_dir": "/opt/fpv-board/fpv_board/assets/night"
   },
   "units": {
-    "wind_display": ["m/s", "km/h"],
+    "wind_display": [
+      "m/s",
+      "km/h"
+    ],
     "temperature": "C",
     "wind_eval": "m/s"
   },

@@ -50,8 +50,17 @@ Install Waveshare Python e-Paper library:
 
 ```bash
 cd /opt/fpv-board
-git clone https://github.com/waveshare/e-Paper.git waveshare-lib
+# Clone only if the folder is not already present in your checkout
+[ -d waveshare-lib ] || git clone https://github.com/waveshare/e-Paper.git waveshare-lib
+
+# Required in any interactive shell before running fpv_board.main manually
 export PYTHONPATH="/opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib:${PYTHONPATH}"
+
+# Quick verification: should print a module path, not an import error
+python - <<'PY2'
+import waveshare_epd
+print("waveshare_epd import OK:", waveshare_epd.__file__)
+PY2
 ```
 
 To make `PYTHONPATH` persistent for systemd, add to service file:
@@ -77,6 +86,7 @@ Edit `/opt/fpv-board/fpv_board/config.json`:
 - `thresholds` for risk logic (configured in mph internally converted to m/s).
 - `forecast.daylight_only = true` to only evaluate sunrise/sunset window.
 - `update.change_tolerance` controls anti-ghosting redraw threshold.
+- `display.night_images_dir` (optional) points to a directory of night images (`.png/.jpg/...`); one image is randomly picked per night and held until morning.
 
 ## Run manually
 Dry-run (no display write):
@@ -90,6 +100,8 @@ python -m fpv_board.main --config /opt/fpv-board/fpv_board/config.json --dry-run
 Live update:
 
 ```bash
+# If this is a new shell, re-export PYTHONPATH first
+export PYTHONPATH="/opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib:${PYTHONPATH}"
 python -m fpv_board.main --config /opt/fpv-board/fpv_board/config.json
 ```
 
@@ -129,7 +141,7 @@ journalctl -u fpv-board.service -n 100 --no-pager
 ## Quick test checklist
 1. `python -m fpv_board.main --dry-run` returns JSON with `status`, `reason`, and `changed`.
 2. First live run updates display; second live run skips refresh if no meaningful changes.
-3. At night, status returns `NOPE` with `Night / No daylight forecast`.
+3. At night, status returns `NOPE` with `Night / No daylight forecast` and, if `display.night_images_dir` contains images, one random image is shown for the whole night.
 4. Timer runs hourly: `systemctl list-timers | grep fpv-board`.
 
 ## Common fixes
@@ -137,6 +149,6 @@ journalctl -u fpv-board.service -n 100 --no-pager
 - **Do not run `pip install lgpio`**: this project uses the Raspberry Pi OS package `python3-lgpio`; pip builds often fail and are unnecessary here.
 - **Wrong pins / BUSY stuck**: verify HAT seated correctly and BUSY maps to GPIO24.
 - **Font missing**: defaults to PIL font automatically; adjust `font_*` paths in config if needed.
-- **Import error for Waveshare module**: confirm `PYTHONPATH` includes Waveshare `python/lib` directory.
+- **Import error for Waveshare module**: confirm `PYTHONPATH` includes Waveshare `python/lib` directory in the current shell, then run `python -c "import waveshare_epd; print(waveshare_epd.__file__)"`.
 - **`No module named lgpio` in venv**: recreate venv with `python3 -m venv --system-site-packages .venv` so apt package `python3-lgpio` is visible. Also remove pip-installed swig wrappers if present (`pip uninstall -y swig`), because they can shadow `/usr/bin/swig` during builds.
 - **`Failed to add edge detection`**: ensure no duplicate process is already using GPIO, then set `GPIOZERO_PIN_FACTORY=lgpio` (in shell or systemd service) and rerun.
