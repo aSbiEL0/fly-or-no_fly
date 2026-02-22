@@ -53,7 +53,7 @@ cd /opt/fpv-board
 # Clone only if the folder is not already present in your checkout
 [ -d waveshare-lib ] || git clone https://github.com/waveshare/e-Paper.git waveshare-lib
 
-# Required in any interactive shell before running fpv_board.main manually
+# Optional for interactive troubleshooting; the app now auto-detects this bundled path when present
 export PYTHONPATH="/opt/fpv-board/waveshare-lib/RaspberryPi_JetsonNano/python/lib:${PYTHONPATH}"
 
 # Quick verification: should print a module path, not an import error
@@ -149,6 +149,6 @@ journalctl -u fpv-board.service -n 100 --no-pager
 - **Do not run `pip install lgpio`**: this project uses the Raspberry Pi OS package `python3-lgpio`; pip builds often fail and are unnecessary here.
 - **Wrong pins / BUSY stuck**: verify HAT seated correctly and BUSY maps to GPIO24.
 - **Font missing**: defaults to PIL font automatically; adjust `font_*` paths in config if needed.
-- **Import error for Waveshare module**: confirm `PYTHONPATH` includes Waveshare `python/lib` directory in the current shell, then run `python -c "import waveshare_epd; print(waveshare_epd.__file__)"`.
+- **Import error for Waveshare module**: confirm `waveshare-lib/RaspberryPi_JetsonNano/python/lib` exists under `/opt/fpv-board` (auto-detected by the app). If running ad-hoc import checks, also export `PYTHONPATH` and run `python -c "import waveshare_epd; print(waveshare_epd.__file__)"`.
 - **`No module named lgpio` in venv**: recreate venv with `python3 -m venv --system-site-packages .venv` so apt package `python3-lgpio` is visible. Also remove pip-installed swig wrappers if present (`pip uninstall -y swig`), because they can shadow `/usr/bin/swig` during builds.
 - **`Failed to add edge detection`**: ensure no duplicate process is already using GPIO, then set `GPIOZERO_PIN_FACTORY=lgpio` (in shell or systemd service) and rerun.

@@ -461,9 +461,24 @@ def states_equal(a: dict[str, Any] | None, b: dict[str, Any]) -> bool:
     return a == b
 
 
+def ensure_waveshare_path() -> None:
+    bundled_lib = Path(__file__).resolve().parent.parent / "waveshare-lib" / "RaspberryPi_JetsonNano" / "python" / "lib"
+    bundled_lib_str = str(bundled_lib)
+    if bundled_lib.exists() and bundled_lib_str not in sys.path:
+        sys.path.insert(0, bundled_lib_str)
+
+
 def show_on_epaper(black: Image.Image, red: Image.Image, model_path: str) -> None:
+    ensure_waveshare_path()
     mod_name, attr_name = model_path.rsplit(".", 1)
-    module = __import__(mod_name, fromlist=[attr_name])
+    try:
+        module = __import__(mod_name, fromlist=[attr_name])
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Could not import Waveshare driver module. Ensure waveshare-lib is cloned at "
+            "/opt/fpv-board/waveshare-lib or set PYTHONPATH to include "
+            "waveshare-lib/RaspberryPi_JetsonNano/python/lib."
+        ) from exc
     epd_factory = getattr(module, attr_name)
     epd = epd_factory() if callable(epd_factory) else getattr(epd_factory, "EPD")()
 
