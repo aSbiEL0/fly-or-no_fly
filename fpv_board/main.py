@@ -21,7 +21,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 
 MS_PER_MPH = 0.44704
-DISPLAY_STATE_VERSION = 2
+DISPLAY_STATE_VERSION = 3
 STATUS_ICON_FILES = {
     "GREAT": "great.png",
     "OK": "ok.png",
@@ -432,6 +432,7 @@ def build_display_state(result: dict[str, Any], cfg: dict[str, Any]) -> dict[str
     w = result.get("worst", {})
     return {
         "version": DISPLAY_STATE_VERSION,
+        "boot_id": current_boot_id(),
         "status": result["status"],
         "reason": result["reason"],
         "trend": result["trend"],
@@ -441,6 +442,14 @@ def build_display_state(result: dict[str, Any], cfg: dict[str, Any]) -> dict[str
         "temp": rounded(float(w.get("temp_min", 0.0)), float(tol["temp_c"])),
         "cloud": rounded(float(w.get("cloud", 0.0)), float(tol["cloud_pct"])),
     }
+
+
+def current_boot_id() -> str:
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+    except OSError:
+        # Fall back so we don't break on systems without procfs.
+        return "unknown"
 
 
 def load_previous_state(cache_file: Path) -> dict[str, Any] | None:
