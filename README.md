@@ -38,6 +38,12 @@ python3 -m venv --system-site-packages .venv
 . .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+
+# Verify lgpio comes from apt/system packages inside this venv
+python - <<'PY'
+import lgpio
+print("lgpio import OK:", lgpio.__file__)
+PY
 ```
 
 Install Waveshare Python e-Paper library:
@@ -128,8 +134,9 @@ journalctl -u fpv-board.service -n 100 --no-pager
 
 ## Common fixes
 - **SPI not enabled**: run `sudo raspi-config nonint do_spi 0` and reboot.
+- **Do not run `pip install lgpio`**: this project uses the Raspberry Pi OS package `python3-lgpio`; pip builds often fail and are unnecessary here.
 - **Wrong pins / BUSY stuck**: verify HAT seated correctly and BUSY maps to GPIO24.
 - **Font missing**: defaults to PIL font automatically; adjust `font_*` paths in config if needed.
 - **Import error for Waveshare module**: confirm `PYTHONPATH` includes Waveshare `python/lib` directory.
-- **`No module named lgpio` in venv**: recreate venv with `python3 -m venv --system-site-packages .venv` so apt package `python3-lgpio` is visible.
-- **`Failed to add edge detection`**: set `GPIOZERO_PIN_FACTORY=lgpio` (in shell or systemd service), then rerun.
+- **`No module named lgpio` in venv**: recreate venv with `python3 -m venv --system-site-packages .venv` so apt package `python3-lgpio` is visible. Also remove pip-installed swig wrappers if present (`pip uninstall -y swig`), because they can shadow `/usr/bin/swig` during builds.
+- **`Failed to add edge detection`**: ensure no duplicate process is already using GPIO, then set `GPIOZERO_PIN_FACTORY=lgpio` (in shell or systemd service) and rerun.
