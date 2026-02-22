@@ -452,6 +452,14 @@ def current_boot_id() -> str:
         return "unknown"
 
 
+def system_boot_time() -> datetime | None:
+    try:
+        uptime_seconds = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+        return datetime.now() - timedelta(seconds=uptime_seconds)
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 def load_previous_state(cache_file: Path) -> dict[str, Any] | None:
     if not cache_file.exists():
         return None
@@ -548,7 +556,15 @@ def run(config_path: Path, dry_run: bool, preview_status: str | None, force_refr
 
     cache_file = Path(cfg["state"]["cache_file"])
     previous_state = load_previous_state(cache_file)
-    changed = force_refresh or bool(preview_status) or (not states_equal(previous_state, display_state))
+    boot_time = system_boot_time()
+    cache_stale = False
+    if boot_time and cache_file.exists():
+        try:
+            cache_stale = datetime.fromtimestamp(cache_file.stat().st_mtime) < boot_time
+        except OSError:
+            cache_stale = True
+
+    changed = force_refresh or bool(preview_status) or cache_stale or (not states_equal(previous_state, display_state))
 
     black, red = render_image(result, now, cfg)
 
