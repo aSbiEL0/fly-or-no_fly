@@ -122,6 +122,8 @@ python -m fpv_board.shutdown --config /opt/fpv-board/fpv_board/config.json
 
 Use `--clear-only` to clear the panel without powering down, or `--dry-run` to verify behavior without touching hardware.
 
+When the shutdown script clears the display, it also removes the cached display state so the next boot/run forces a redraw instead of skipping as "unchanged."
+
 ## systemd setup
 
 ```bash
