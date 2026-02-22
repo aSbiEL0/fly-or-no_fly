@@ -135,7 +135,7 @@ def parse_hourly(data: dict[str, Any]) -> tuple[list[HourlyPoint], list[datetime
 
 def next_daylight_window(now: datetime, sunrise: list[datetime], sunset: list[datetime]) -> tuple[datetime, datetime] | None:
     for rise, set_ in zip(sunrise, sunset):
-        if now <= set_:
+        if rise <= now <= set_:
             return rise, set_
     return None
 
