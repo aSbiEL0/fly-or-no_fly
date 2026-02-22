@@ -147,8 +147,12 @@ def select_eval_points(
     daylight_only: bool,
     hours_ahead: int,
 ) -> list[HourlyPoint]:
-    end = now.timestamp() + (hours_ahead * 3600)
-    selected = [p for p in points if now <= p.timestamp and p.timestamp.timestamp() <= end]
+    end = now + timedelta(hours=hours_ahead)
+    selected = [p for p in points if now <= p.timestamp <= end]
+
+    if daylight_only and daylight_window is None:
+        return []
+
     if daylight_only and daylight_window:
         rise, set_ = daylight_window
         selected = [p for p in selected if rise <= p.timestamp <= set_]
