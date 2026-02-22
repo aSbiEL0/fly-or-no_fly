@@ -6,14 +6,16 @@ import argparse
 import logging
 import subprocess
 from pathlib import Path
+from typing import Any
 
-from fpv_board.main import load_config, setup_logging
+from fpv_board.main import ensure_waveshare_path, load_config, setup_logging
 
 
 DEFAULT_CONFIG_PATH = Path("/opt/fpv-board/fpv_board/config.json")
 
 
 def clear_display(model_path: str) -> None:
+    ensure_waveshare_path()
     mod_name, attr_name = model_path.rsplit(".", 1)
     module = __import__(mod_name, fromlist=[attr_name])
     epd_factory = getattr(module, attr_name)
@@ -26,6 +28,15 @@ def clear_display(model_path: str) -> None:
 
 def shutdown_pi() -> None:
     subprocess.run(["sudo", "shutdown", "-h", "now"], check=True)
+
+
+def invalidate_state_cache(cfg: dict[str, Any]) -> None:
+    cache_file = Path(str(cfg["state"]["cache_file"]))
+    try:
+        cache_file.unlink(missing_ok=True)
+        logging.info("Removed cached display state at %s to force refresh on next run", cache_file)
+    except OSError as exc:
+        logging.warning("Unable to remove cached display state %s: %s", cache_file, exc)
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,6 +68,7 @@ def main() -> int:
 
     clear_display(model_path)
     logging.info("Display cleared and put to sleep")
+    invalidate_state_cache(cfg)
 
     if args.clear_only:
         logging.info("Clear-only mode enabled; skipping shutdown")
