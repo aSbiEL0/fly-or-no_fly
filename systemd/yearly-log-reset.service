@@ -1,0 +1,10 @@
+[Unit]
+Description=Reset FPV status CSV yearly
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/opt/fpv-board
+ExecStart=/opt/fpv-board/.venv/bin/python /opt/fpv-board/scripts/reset_status_logs.py --root /opt/fpv-board
+StandardOutput=journal
+StandardError=journal
