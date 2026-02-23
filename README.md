@@ -68,6 +68,77 @@ python -m fpv_board.main --config /opt/fpv-board/fpv_board/config.json --dry-run
 python /opt/fpv-board/scripts/weekly_report.py --config /opt/fpv-board/fpv_board/config.json --dotenv /opt/fpv-board/.env --force
 ```
 
+## Update the Pi after each merge (no manual file copying)
+
+Use one of these repeatable workflows.
+
+### Fastest day-to-day command (recommended)
+
+Run the included updater script on the Pi:
+
+```bash
+cd /opt/fpv-board
+./scripts/update_pi.sh
+```
+
+If you sometimes make local edits on the Pi, use:
+
+```bash
+cd /opt/fpv-board
+./scripts/update_pi.sh --auto-stash
+```
+
+The script will:
+
+- verify `/opt/fpv-board` is a git checkout,
+- fetch + fast-forward pull from `origin/main`,
+- reinstall Python requirements,
+- reload and restart board timers.
+
+### Option A: Pi pulls directly from GitHub (manual commands)
+
+One-time setup on the Pi (if `/opt/fpv-board` is not already a git clone):
+
+```bash
+sudo rm -rf /opt/fpv-board
+sudo git clone <YOUR_REPO_URL> /opt/fpv-board
+sudo chown -R pi:pi /opt/fpv-board
+cd /opt/fpv-board
+python3 -m venv --system-site-packages .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+```
+
+After each merge to `main`, update with:
+
+```bash
+cd /opt/fpv-board
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+. .venv/bin/activate
+pip install -r requirements.txt
+sudo systemctl daemon-reload
+sudo systemctl restart fpv-board.timer weekly-report.timer yearly-log-reset.timer
+```
+
+### Option B: push from your laptop to the Pi with one command
+
+If you prefer to keep the Pi as a deployed copy instead of a git checkout:
+
+```bash
+rsync -av --delete \
+  --exclude '.git' \
+  --exclude '.venv' \
+  --exclude 'data' \
+  --exclude '.env' \
+  ./ pi@<PI_HOST>:/opt/fpv-board/
+ssh pi@<PI_HOST> 'cd /opt/fpv-board && . .venv/bin/activate && pip install -r requirements.txt && sudo systemctl daemon-reload && sudo systemctl restart fpv-board.timer weekly-report.timer yearly-log-reset.timer'
+```
+
+This gives you a reliable, "single update step" after each merge.
+
 ## Documentation
 
-Detailed operational documentation is in `docs/wiki/Weekly-Reporting.md` (ready to publish to GitHub Wiki).
+- Detailed operational documentation is in `docs/wiki/Weekly-Reporting.md` (ready to publish to GitHub Wiki).
+- Full status decision reference is in `docs/wiki/Status-Decision-Process.md` (comprehensive scoring and status flow record).

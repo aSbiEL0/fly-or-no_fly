@@ -27,7 +27,7 @@ from fpv_board.notify.smtp_email import SmtpEmailClient, load_dotenv
 from fpv_board.state.state_store import StateStore
 
 MS_PER_MPH = 0.44704
-DISPLAY_STATE_VERSION = 3
+DISPLAY_STATE_VERSION = 4
 STATUS_ICON_FILES = {
     "GREAT": "great.png",
     "OK": "ok.png",
@@ -180,9 +180,27 @@ def status_from_score(score: int) -> str:
     return "NOPE"
 
 
+def _metric_level(actual: float, threshold: float, *, higher_is_worse: bool, severe_multiplier: float) -> int:
+    if higher_is_worse:
+        if actual > threshold * severe_multiplier:
+            return 3
+        if actual > threshold:
+            return 2
+        if actual > threshold * 0.85:
+            return 1
+        return 0
+
+    if actual < threshold:
+        return 2
+    if actual < threshold + 2:
+        return 1
+    return 0
+
+
 def evaluate(points: list[HourlyPoint], cfg: dict[str, Any]) -> dict[str, Any]:
     thresholds = cfg["thresholds"]
     mult = float(thresholds.get("marginal_multiplier", 1.25))
+    nope_mult = float(thresholds.get("nope_multiplier", mult * 1.25))
 
     sustained_fly = mph_to_ms(float(thresholds["sustained_fly_max"]))
     gust_fly = mph_to_ms(float(thresholds["gust_fly_max"]))
@@ -200,48 +218,66 @@ def evaluate(points: list[HourlyPoint], cfg: dict[str, Any]) -> dict[str, Any]:
             "score": 3,
         }
 
-    worst = {
-        "wind_ms": max(p.wind_ms for p in points),
-        "gust_ms": max(p.gust_ms for p in points),
-        "spread_ms": max((p.gust_ms - p.wind_ms) for p in points),
-        "rain": max(p.rain_probability for p in points),
-        "temp_min": min(p.temp_c for p in points),
-        "cloud": max(p.cloud_cover for p in points),
-    }
+    aggregation = str(cfg.get("forecast", {}).get("window_aggregation", "worst")).lower()
+    if aggregation == "average":
+        count = len(points)
+        summary = {
+            "wind_ms": sum(p.wind_ms for p in points) / count,
+            "gust_ms": sum(p.gust_ms for p in points) / count,
+            "spread_ms": sum((p.gust_ms - p.wind_ms) for p in points) / count,
+            "rain": sum(p.rain_probability for p in points) / count,
+            "temp_min": sum(p.temp_c for p in points) / count,
+            "cloud": sum(p.cloud_cover for p in points) / count,
+        }
+    else:
+        summary = {
+            "wind_ms": max(p.wind_ms for p in points),
+            "gust_ms": max(p.gust_ms for p in points),
+            "spread_ms": max((p.gust_ms - p.wind_ms) for p in points),
+            "rain": max(p.rain_probability for p in points),
+            "temp_min": min(p.temp_c for p in points),
+            "cloud": max(p.cloud_cover for p in points),
+        }
 
     checks: list[tuple[str, float, float, bool]] = [
-        ("wind", worst["wind_ms"], sustained_fly, True),
-        ("gusts", worst["gust_ms"], gust_fly, True),
-        ("spread", worst["spread_ms"], spread_fly, True),
-        ("rain", worst["rain"], rain_fly, True),
-        ("temperature", worst["temp_min"], temp_min, False),
-        ("cloud", worst["cloud"], cloud_warn, True),
+        ("wind", summary["wind_ms"], sustained_fly, True),
+        ("gusts", summary["gust_ms"], gust_fly, True),
+        ("spread", summary["spread_ms"], spread_fly, True),
+        ("rain", summary["rain"], rain_fly, True),
+        ("temperature", summary["temp_min"], temp_min, False),
+        ("cloud", summary["cloud"], cloud_warn, True),
     ]
 
-    score = 0
-    reasons: list[str] = []
+    metric_levels: list[tuple[str, int]] = []
     for metric, actual, threshold, higher_is_worse in checks:
         if metric == "cloud" and threshold >= 100:
             continue
-        if higher_is_worse:
-            if actual > threshold * mult:
-                score = max(score, 3)
-                reasons.append(f"{metric} high")
-            elif actual > threshold:
-                score = max(score, 2)
-                reasons.append(f"{metric} borderline")
-            elif actual > threshold * 0.85:
-                score = max(score, 1)
+        level = _metric_level(actual, threshold, higher_is_worse=higher_is_worse, severe_multiplier=nope_mult)
+        metric_levels.append((metric, level))
+
+    score = max((level for _, level in metric_levels), default=0)
+    severe_count = sum(1 for _, level in metric_levels if level >= 3)
+    risky_count = sum(1 for _, level in metric_levels if level >= 2)
+
+    # A single severe outlier should usually be RISKY; reserve NOPE for broad bad conditions.
+    if score == 3 and severe_count == 1 and risky_count < 2:
+        score = 2
+
+    reason = "conditions stable"
+    reason_level = max(score, 1)
+    for metric, level in metric_levels:
+        if level < reason_level:
+            continue
+        if level >= 3:
+            reason = f"{metric} very high"
+        elif level == 2:
+            reason = "cold" if metric == "temperature" else f"{metric} high"
         else:
-            if actual < threshold:
-                score = max(score, 2)
-                reasons.append("cold")
-            elif actual < threshold + 2:
-                score = max(score, 1)
+            reason = "cool" if metric == "temperature" else f"{metric} rising"
+        break
 
     trend = build_trend(points, cfg["forecast"]["trend_window_hours"])
-    reason = reasons[0] if reasons else "conditions stable"
-    return {"status": status_from_score(score), "reason": reason, "worst": worst, "trend": trend, "score": score}
+    return {"status": status_from_score(score), "reason": reason, "worst": summary, "trend": trend, "score": score}
 
 
 def build_trend(points: list[HourlyPoint], window_hours: int) -> str:
@@ -366,10 +402,16 @@ def render_image(result: dict[str, Any], now: datetime, cfg: dict[str, Any]) -> 
     width = int(cfg["display"]["width"])
     height = int(cfg["display"]["height"])
 
+    rotation = int(cfg.get("display", {}).get("rotation_degrees", 0)) % 360
+
     if result.get("status") == "NOPE" and result.get("reason") == "Night / No daylight forecast":
         night_image = pick_night_image(now, cfg)
         if night_image:
-            return render_night_image(night_image, width, height)
+            black, red = render_night_image(night_image, width, height)
+            if rotation:
+                black = black.rotate(rotation, expand=False)
+                red = red.rotate(rotation, expand=False)
+            return black, red
 
     black = Image.new("1", (width, height), 255)
     red = Image.new("1", (width, height), 255)
@@ -425,6 +467,9 @@ def render_image(result: dict[str, Any], now: datetime, cfg: dict[str, Any]) -> 
     trend_width = draw_b.textbbox((0, 0), trend_text, font=trend_font)[2]
     trend_x = max(8, (width - trend_width) // 2)
     trend_color.text((trend_x, 136), trend_text, font=trend_font, fill=0)
+    if rotation:
+        black = black.rotate(rotation, expand=False)
+        red = red.rotate(rotation, expand=False)
     return black, red
 
 
@@ -448,6 +493,7 @@ def build_display_state(result: dict[str, Any], cfg: dict[str, Any]) -> dict[str
         "rain": rounded(float(w.get("rain", 0.0)), float(tol["rain_pct"])),
         "temp": rounded(float(w.get("temp_min", 0.0)), float(tol["temp_c"])),
         "cloud": rounded(float(w.get("cloud", 0.0)), float(tol["cloud_pct"])),
+        "rotation": int(cfg.get("display", {}).get("rotation_degrees", 0)) % 360,
     }
 
 

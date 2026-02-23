@@ -14,7 +14,8 @@
     "font_bold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "layout": "status",
     "icon_set": "faces",
-    "night_images_dir": "/opt/fpv-board/fpv_board/assets/night"
+    "night_images_dir": "/opt/fpv-board/fpv_board/assets/night",
+    "rotation_degrees": 180
   },
   "units": {
     "wind_display": [
@@ -27,16 +28,18 @@
   "thresholds": {
     "source_unit": "mph",
     "sustained_fly_max": 18,
-    "gust_fly_max": 25,
-    "gust_spread_fly_max": 8,
+    "gust_fly_max": 28,
+    "gust_spread_fly_max": 12,
     "rain_probability_fly_max": 85,
     "temperature_min_c": 2,
     "cloud_cover_warn": 100,
-    "marginal_multiplier": 1.25
+    "marginal_multiplier": 1.5,
+    "nope_multiplier": 1.8
   },
   "forecast": {
     "daylight_only": true,
-    "hours_ahead": 12,
+    "hours_ahead": 1,
+    "window_aggregation": "average",
     "trend_window_hours": 6,
     "night_mode": "show_night"
   },
