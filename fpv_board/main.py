@@ -8,6 +8,7 @@ import logging
 import math
 import os
 import random
+import smtplib
 import sys
 import time
 from dataclasses import dataclass
@@ -16,9 +17,14 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from functools import lru_cache
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
+
+from fpv_board.logging.csv_logger import StatusCsvLogger
+from fpv_board.notify.smtp_email import SmtpEmailClient, load_dotenv
+from fpv_board.state.state_store import StateStore
 
 MS_PER_MPH = 0.44704
 DISPLAY_STATE_VERSION = 3
@@ -29,6 +35,7 @@ STATUS_ICON_FILES = {
     "NOPE": "nope.png",
 }
 NIGHT_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
+LOCAL_TZ = ZoneInfo("Europe/London")
 
 
 @dataclass
@@ -518,9 +525,60 @@ def apply_preview_status(result: dict[str, Any], preview_status: str | None) -> 
     return preview_result
 
 
+def _local_timestamps(now: datetime) -> tuple[str, str]:
+    now_local = now.astimezone(LOCAL_TZ)
+    ts_local = now_local.strftime("%Y-%m-%d %H:%M:%S")
+    hour_start_local = now_local.replace(minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+    return ts_local, hour_start_local
+
+
+def _is_daylight_heuristic(now: datetime) -> bool:
+    hour = now.astimezone(LOCAL_TZ).hour
+    return 6 <= hour <= 21
+
+
+def _send_warning_email(config_path: Path, message: str) -> None:
+    root = config_path.resolve().parent.parent
+    load_dotenv(root / ".env")
+    SmtpEmailClient().send("[WARNING] Drone Dashboard Weekly Update & Forecast", message)
+
+
+def _update_failure_escalation(state_store: StateStore, daylight_failure: bool, config_path: Path) -> None:
+    state = state_store.load()
+    failure_state = state.setdefault("api_failure", {"consecutive_daylight_failures": 0, "last_warning_count": 0})
+
+    if not daylight_failure:
+        failure_state["consecutive_daylight_failures"] = 0
+        failure_state["last_warning_count"] = 0
+        state_store.save(state)
+        return
+
+    failure_state["consecutive_daylight_failures"] = int(failure_state.get("consecutive_daylight_failures", 0)) + 1
+    current = failure_state["consecutive_daylight_failures"]
+    last_warning_count = int(failure_state.get("last_warning_count", 0))
+    send_warning = current in {6, 18, 30, 42} and current != last_warning_count
+
+    if send_warning:
+        try:
+            _send_warning_email(
+                config_path,
+                f"Consecutive daylight API failures reached {current}. Please check connectivity/Open-Meteo availability.",
+            )
+            failure_state["last_warning_count"] = current
+        except (RuntimeError, smtplib.SMTPException, OSError) as exc:
+            logging.warning("Warning email send failed: %s", exc)
+
+    state_store.save(state)
+
+
 def run(config_path: Path, dry_run: bool, preview_status: str | None, force_refresh: bool) -> int:
     cfg = load_config(config_path)
     setup_logging(Path(cfg["state"]["log_file"]))
+
+    root = config_path.resolve().parent.parent
+    data_dir = root / "data"
+    csv_logger = StatusCsvLogger(data_dir / "status_log.csv", data_dir / "index.json")
+    state_store = StateStore(data_dir / "state.json")
 
     weather_client = WeatherClient(
         timeout_seconds=int(cfg["update"]["request_timeout_seconds"]),
@@ -529,28 +587,80 @@ def run(config_path: Path, dry_run: bool, preview_status: str | None, force_refr
     )
 
     loc = cfg["location"]
-    now = datetime.now()
-    raw = weather_client.fetch(float(loc["latitude"]), float(loc["longitude"]), str(loc["timezone"]))
-    points, sunrise, sunset = parse_hourly(raw)
+    now = datetime.now(LOCAL_TZ)
+    ts_local, hour_start_local = _local_timestamps(now)
 
-    daylight_window = next_daylight_window(now, sunrise, sunset)
+    try:
+        raw = weather_client.fetch(float(loc["latitude"]), float(loc["longitude"]), str(loc["timezone"]))
+        points, sunrise, sunset = parse_hourly(raw)
+    except Exception as exc:  # noqa: BLE001
+        daylight_failure = _is_daylight_heuristic(now)
+        if daylight_failure:
+            csv_logger.append_if_new_hour(
+                {
+                    "ts_local": ts_local,
+                    "hour_start_local": hour_start_local,
+                    "row_type": "ERROR",
+                    "status": "ERROR",
+                    "wind_ms": "",
+                    "gust_ms": "",
+                    "spread_ms": "",
+                    "rain_probability": "",
+                    "temp_c": "",
+                    "cloud_cover": "",
+                    "is_daylight": 1,
+                    "reason": f"API_FAIL:{exc}",
+                    "score": "",
+                    "trend": "",
+                }
+            )
+        _update_failure_escalation(state_store, daylight_failure=daylight_failure, config_path=config_path)
+        raise
+
+    now_naive = now.replace(tzinfo=None)
+    daylight_window = next_daylight_window(now_naive, sunrise, sunset)
     selected = select_eval_points(
         points,
-        now,
+        now_naive,
         daylight_window,
         bool(cfg["forecast"].get("daylight_only", True)),
         int(cfg["forecast"]["hours_ahead"]),
     )
 
     result = evaluate(selected, cfg)
+    result["trend"] = result.get("trend") or "No change forecasted"
     result = apply_preview_status(result, preview_status)
+
+    if daylight_window is not None:
+        w = result.get("worst", {})
+        csv_logger.append_if_new_hour(
+            {
+                "ts_local": ts_local,
+                "hour_start_local": hour_start_local,
+                "row_type": "HOURLY",
+                "status": result["status"],
+                "wind_ms": w.get("wind_ms", ""),
+                "gust_ms": w.get("gust_ms", ""),
+                "spread_ms": w.get("spread_ms", ""),
+                "rain_probability": w.get("rain", ""),
+                "temp_c": w.get("temp_min", ""),
+                "cloud_cover": w.get("cloud", ""),
+                "is_daylight": 1,
+                "reason": result.get("reason", ""),
+                "score": result.get("score", ""),
+                "trend": result.get("trend", "No change forecasted"),
+            }
+        )
+
+    _update_failure_escalation(state_store, daylight_failure=False, config_path=config_path)
+
     display_state = build_display_state(result, cfg)
 
     cache_file = Path(cfg["state"]["cache_file"])
     previous_state = load_previous_state(cache_file)
     changed = force_refresh or bool(preview_status) or (not states_equal(previous_state, display_state))
 
-    black, red = render_image(result, now, cfg)
+    black, red = render_image(result, now_naive, cfg)
 
     if dry_run:
         print(json.dumps({"display_state": display_state, "changed": changed, "result": result}, indent=2, default=str))

@@ -1,0 +1,12 @@
+[Unit]
+Description=FPV weekly report email
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/opt/fpv-board
+ExecStart=/opt/fpv-board/.venv/bin/python /opt/fpv-board/scripts/weekly_report.py --config /opt/fpv-board/fpv_board/config.json --dotenv /opt/fpv-board/.env
+StandardOutput=journal
+StandardError=journal
