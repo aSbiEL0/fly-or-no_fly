@@ -1,5 +1,13 @@
 # Raspberry Pi FPV Flight Board
 
+
+## Hardware
+
+- **Raspberry Pi**: Zero 2 W running Raspberry Pi OS Lite (Trixie) – other models with a 40‑pin header should also work.
+- **Display**: Waveshare 2.15″ e‑Paper HAT+ (B), red/black/white tri‑colour (296×160).
+- **Storage**: microSD card (8 GB or larger).
+- **Power**: 5 V micro‑USB supply or power bank.
+- **Optional**: case or stand, soldered GPIO header.
 ## Install
 
 ```bash
