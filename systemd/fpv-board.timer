@@ -2,6 +2,7 @@
 Description=Run FPV Flight Board updater hourly
 
 [Timer]
+OnBootSec=2min
 OnCalendar=hourly
 Persistent=true
 AccuracySec=1min
